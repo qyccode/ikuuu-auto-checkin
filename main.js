@@ -88,7 +88,11 @@ async function processSingleAccount(account) {
 }
 
 function setGitHubOutput(name, value) {
-  appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<EOF\n${value}\nEOF\n`);
+  // Node.js 24 下显式转换为字符串，避免 appendFileSync 隐式字符串化触发弃用警告
+  appendFileSync(
+    process.env.GITHUB_OUTPUT,
+    `${name}<<EOF\n${String(value)}\nEOF\n`
+  );
 }
 
 // 入口
