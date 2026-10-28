@@ -1,14 +1,15 @@
 // 不直接使用 Cookie 是因为 Cookie 过期时间较短。
+// ✅ 但当前 ikuuu 登录流程已变更，账号密码直登会被服务端拒绝（invalid_phase），
+//    因此改为「纯 Cookie 直签」模式：只请求 /user/checkin，不再走 /auth/login。
 
 import { appendFileSync } from "fs";
 
-const host = process.env.HOST || "ikuuu.one";
+const host = process.env.HOST || "ikuuu.top";
 
-const logInUrl = `https://${host}/auth/login`;
 const checkInUrl = `https://${host}/user/checkin`;
 
-// 模拟浏览器请求头，避免 Node 内置 fetch 默认 UA（node）被服务端判定为非法客户端
-function buildHeaders(refererPath = "/auth/login") {
+// 模拟浏览器请求头
+function buildHeaders(refererPath = "/user/checkin") {
   return {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -17,61 +18,6 @@ function buildHeaders(refererPath = "/auth/login") {
     Origin: `https://${host}`,
     Referer: `https://${host}${refererPath}`,
   };
-}
-
-// 格式化 Cookie
-function formatCookie(rawCookieArray) {
-  const cookiePairs = new Map();
-
-  for (const cookieString of rawCookieArray) {
-    const match = cookieString.match(/^\s*([^=]+)=([^;]*)/);
-    if (match) {
-      cookiePairs.set(match[1].trim(), match[2].trim());
-    }
-  }
-
-  return Array.from(cookiePairs)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("; ");
-}
-
-// 登录获取 Cookie
-async function logIn(account) {
-  console.log(`${account.name}: 登录中...`);
-
-  const formData = new FormData();
-  formData.append("host", host);
-  formData.append("email", account.email);
-  formData.append("passwd", account.passwd);
-  formData.append("code", "");
-  formData.append("remember_me", "off");
-
-  const response = await fetch(logInUrl, {
-    method: "POST",
-    headers: buildHeaders("/auth/login"),
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`网络请求出错 - ${response.status}`);
-  }
-
-  const responseJson = await response.json();
-
-  if (responseJson.ret !== 1) {
-    // 打印原始响应体，便于排查服务端拒绝的具体原因
-    console.error(`${account.name}: 登录响应`, responseJson);
-    throw new Error(`登录失败: ${responseJson.msg}`);
-  } else {
-    console.log(`${account.name}: ${responseJson.msg}`);
-  }
-
-  let rawCookieArray = response.headers.getSetCookie();
-  if (!rawCookieArray || rawCookieArray.length === 0) {
-    throw new Error(`获取 Cookie 失败`);
-  }
-
-  return { ...account, cookie: formatCookie(rawCookieArray) };
 }
 
 // 签到
@@ -96,11 +42,10 @@ async function checkIn(account) {
 
 // 处理
 async function processSingleAccount(account) {
-  const cookedAccount = await logIn(account);
-
-  const checkInResult = await checkIn(cookedAccount);
-
-  return checkInResult;
+  if (!account.cookie) {
+    throw new Error("缺少 Cookie，请在 ACCOUNTS 中配置 cookie 字段");
+  }
+  return await checkIn(account);
 }
 
 function setGitHubOutput(name, value) {
