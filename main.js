@@ -7,6 +7,18 @@ const host = process.env.HOST || "ikuuu.one";
 const logInUrl = `https://${host}/auth/login`;
 const checkInUrl = `https://${host}/user/checkin`;
 
+// 模拟浏览器请求头，避免 Node 内置 fetch 默认 UA（node）被服务端判定为非法客户端
+function buildHeaders(refererPath = "/auth/login") {
+  return {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    Origin: `https://${host}`,
+    Referer: `https://${host}${refererPath}`,
+  };
+}
+
 // 格式化 Cookie
 function formatCookie(rawCookieArray) {
   const cookiePairs = new Map();
@@ -36,6 +48,7 @@ async function logIn(account) {
 
   const response = await fetch(logInUrl, {
     method: "POST",
+    headers: buildHeaders("/auth/login"),
     body: formData,
   });
 
@@ -46,6 +59,8 @@ async function logIn(account) {
   const responseJson = await response.json();
 
   if (responseJson.ret !== 1) {
+    // 打印原始响应体，便于排查服务端拒绝的具体原因
+    console.error(`${account.name}: 登录响应`, responseJson);
     throw new Error(`登录失败: ${responseJson.msg}`);
   } else {
     console.log(`${account.name}: ${responseJson.msg}`);
@@ -64,6 +79,7 @@ async function checkIn(account) {
   const response = await fetch(checkInUrl, {
     method: "POST",
     headers: {
+      ...buildHeaders("/user/checkin"),
       Cookie: account.cookie,
     },
   });
